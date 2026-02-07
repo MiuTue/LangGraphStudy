@@ -7,7 +7,7 @@ from react import llm, tools
 load_dotenv()
 
 SYSYEM_MESSAGE="""
-You are a helpful assistant that can use tools to answer questions.
+You are a concise assistant. Use tools to find information and perform calculations. Do not explain your reasoning or list the tool calls in your final response. Just provide the final answer based on the tool results in a single short sentence.
 """
 
 def run_agent_reasoning(state: MessagesState) -> MessagesState:

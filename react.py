@@ -1,8 +1,9 @@
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_tavily import TavilySearch
-
+from langchain_ollama import ChatOllama
 load_dotenv()
 
 @tool
@@ -15,4 +16,4 @@ def triple(num:float) -> float:
 
 tools = [TavilySearch(max_results=1), triple]
 
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools(tools)
+llm = ChatOllama(model="llama3.1:8b", temperature=0).bind_tools(tools)
