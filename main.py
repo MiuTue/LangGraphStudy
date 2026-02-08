@@ -1,9 +1,8 @@
 from dotenv import load_dotenv
 
-from typing import List, Literal, TypedDict, Annotated
-from langchain_core.messages import HumanMessage, BaseMessage, AIMessage, ToolMessage
+from typing import Literal
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.graph import StateGraph, END, START, MessagesState
-from langgraph.graph.message import add_messages
 
 from chains import revisor, first_responder
 from tool_excutor import execute_tools
@@ -20,7 +19,7 @@ def revise_node(state: MessagesState):
     response = revisor.invoke({"messages": state["messages"]})
     return {"messages": [response]}
 
-def event_loop(state: MessagesState) -> Literal["execute_tools", END]: 
+def event_loop(state: MessagesState) -> Literal["execute_tools", END]: # type: ignore
     """Determine whether to execute tools or end the process."""
     count_tool_visits = sum(
         isinstance(item, ToolMessage) for item in state["messages"]
