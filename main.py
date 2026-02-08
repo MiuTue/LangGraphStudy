@@ -1,45 +1,61 @@
 from dotenv import load_dotenv
 
-from typing import List, TypedDict, Annotated
-from langchain_core.messages import HumanMessage, BaseMessage
-from langgraph.graph import StateGraph,END
+from typing import List, Literal, TypedDict, Annotated
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessage, ToolMessage
+from langgraph.graph import StateGraph, END, START, MessagesState
 from langgraph.graph.message import add_messages
 
-from chains import generate_chain, reflect_chain
-
-
+from chains import revisor, first_responder
+from tool_excutor import execute_tools
 load_dotenv()
 
-class MessageGraph(TypedDict):
-    messages: Annotated[list[BaseMessage], add_messages]
-    
-REFLECT="reflect"
-GENERATE="generate"
+MAX_ITERATIONS = 2
+def draft_node(state: MessagesState):
+    """Draft the initial response."""
+    response = first_responder.invoke({"messages": state["messages"]})
+    return {"messages": [response]}
 
-def generation_node(state: MessageGraph):
-    return {"messages" : [generate_chain.invoke({"messages": state["messages"]})]}
+def revise_node(state: MessagesState):
+    """Revise the response."""
+    response = revisor.invoke({"messages": state["messages"]})
+    return {"messages": [response]}
 
-def reflection_node(state: MessageGraph):
-    res = reflect_chain.invoke({"messages": state["messages"]})
-    return {"messages" : [HumanMessage(content = res.content)]}
-
-builder = StateGraph(state_schema=MessageGraph)
-builder.add_node(GENERATE, generation_node)
-builder.add_node(REFLECT, reflection_node)
-builder.set_entry_point(GENERATE)
-
-def should_continue(state: List[BaseMessage]):
-    if len(state["messages"]) > 8:
+def event_loop(state: MessagesState) -> Literal["execute_tools", END]: 
+    """Determine whether to execute tools or end the process."""
+    count_tool_visits = sum(
+        isinstance(item, ToolMessage) for item in state["messages"]
+    )
+    number_iterations = count_tool_visits
+    if number_iterations < MAX_ITERATIONS:
+        return "execute_tools"
+    else:
         return END
-    return REFLECT
 
-builder.add_conditional_edges(GENERATE, should_continue, {END: END, REFLECT: REFLECT})
-builder.add_edge(REFLECT, GENERATE)
-app = builder.compile()
-app.get_graph().draw_mermaid_png(output_file_path="reflection_agent_graph.png")
+builder = StateGraph(MessagesState)
+builder.add_node("draft", draft_node)
+builder.add_node("revise", revise_node)
+builder.add_node("execute_tools", execute_tools)
+builder.add_edge(START, "draft")
+builder.add_edge("draft", "execute_tools")
+builder.add_edge("execute_tools", "revise")
+builder.add_conditional_edges("revise", event_loop, {"execute_tools": "execute_tools", END: END})
+graph = builder.compile()
+graph.get_graph().draw_mermaid_png(output_file_path="reflextion_agent_graph.png")
 
 if __name__ == "__main__":
     print("Hello Reflection agent")
-    inputs = HumanMessage(content="""Make this tweet better: "MiuTue is the best coder at DTU" """)
-    response = app.invoke({"messages": [inputs]})
-    print(response["messages"][-1].content)
+    res = graph.invoke(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Write about AI-Powered SOC / autonomous soc problem domain, list startups that do that and raised capital.",
+            }
+        ]
+    }
+    )
+    # Extract the final answer from the last message with tool calls
+    last_message = res["messages"][-1]
+    if isinstance(last_message, AIMessage) and last_message.tool_calls:
+        print(last_message.tool_calls[0]["args"]["answer"])
+  
